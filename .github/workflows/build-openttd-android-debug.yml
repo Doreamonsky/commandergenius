@@ -1,0 +1,71 @@
+name: Build OpenTTD Android (arm64 Debug)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ sdl_android ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      APP_NAME: openttd
+      ARCH_LIST: arm64-v8a          # Build only arm64
+      ANDROID_BUILD_TOOLS: 35.0.0   # Adjust if needed
+
+    steps:
+      - name: Use Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Init required submodules
+        run: >
+          git submodule update --init --recursive --depth=1
+          project/jni/application/${APP_NAME}
+          project/jni/iconv/src
+          project/jni/sdl2 project/jni/sdl2_image
+          project/jni/sdl2_mixer project/jni/sdl2_ttf
+
+      - name: Symlink application dir
+        run: ln -s ${APP_NAME} project/jni/application/src
+
+      - name: Set architectures list (arm64 only)
+        run: sed -i "s/MultiABI=.*/MultiABI='${ARCH_LIST}'/g" project/jni/application/src/AndroidAppSettings.cfg
+
+      - name: Accept Android SDK licenses & ensure build-tools
+        working-directory: project
+        run: |
+          # Accept all licenses
+          for Y in `seq 20`; do echo y; done | sudo $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+          # Make sure build-tools version exists
+          sudo $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "build-tools;${ANDROID_BUILD_TOOLS}"
+
+      - name: Patch Java/NDK settings (prep)
+        run: |
+          chmod +x ./changeAppSettings.sh ./build.sh
+          export PATH="$ANDROID_NDK_LATEST_HOME:$PATH"
+          ./changeAppSettings.sh
+
+      - name: Build (Debug)
+        run: |
+          export PATH="$ANDROID_NDK_LATEST_HOME:$ANDROID_SDK_ROOT/build-tools/${ANDROID_BUILD_TOOLS}:$PATH"
+          # Run pelya’s build script, output goes to project/bin/MainActivity-debug.apk
+          ./build.sh
+          ls -al project/bin || true
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenTTD-arm64-debug-apk
+          path: project/bin/MainActivity-debug.apk
+          if-no-files-found: error
