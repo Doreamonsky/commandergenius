@@ -18,12 +18,7 @@
 
 name: openttd
 on:
-  push:
-    branches:
-      - '*'
-    tags:
-      - '*'
-  pull_request: {}
+  workflow_dispatch:
 
 jobs:
   build:
