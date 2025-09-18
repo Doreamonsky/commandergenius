@@ -25,14 +25,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Keep full history to reliably resolve submodule SHAs
-          fetch-depth: 0
+          # Follow the reference workflow: shallow checkout, no submodules yet
+          fetch-depth: 1
           submodules: false
 
-      - name: Init submodules (follow superproject commits)
-        run: |
-          git submodule sync --recursive
-          git submodule update --init --recursive
+      - name: Init required submodules (shallow, selective)
+        # Match the original workflow's style: only init the needed submodules with --depth=1
+        run: >
+          git submodule update --init --recursive --depth=1
+          project/jni/application/${APP_NAME}
+          project/jni/iconv/src
+          project/jni/sdl2 project/jni/sdl2_image
+          project/jni/sdl2_mixer project/jni/sdl2_ttf
 
       - name: Symlink application dir
         run: ln -s ${APP_NAME} project/jni/application/src
@@ -40,7 +44,31 @@ jobs:
       - name: Set architectures list (arm64 only)
         run: sed -i "s/MultiABI=.*/MultiABI='${ARCH_LIST}'/g" project/jni/application/src/AndroidAppSettings.cfg
 
-      # === STRICTLY FOLLOW YOUR FLOW FROM HERE ===
+      # === ICU cache (copied from the reference workflow) ===
+
+      - name: Compute ICU cache key
+        id: icu-rev
+        run: echo "ICU_REV=`git -C project/jni/iconv/src rev-parse HEAD`::`echo ${ARCH_LIST} | sed 's/ /:/g'`" >> $GITHUB_ENV
+
+      - name: Restore ICU build cache
+        uses: actions/cache@v4
+        id: cache-icu
+        with:
+          # Same SDL/iconv revision + ARCH_LIST should reproduce identical ICU outputs
+          key: ${{ env.ICU_REV }}
+          path: |
+            project/jni/iconv/include
+            project/jni/iconv/lib
+            project/jni/icuuc/include
+            project/jni/icuuc/lib
+            project/jni/icuuc/share/icu
+
+      - name: Touch cached ICU timestamps (if cache hit)
+        if: steps.cache-icu.outputs.cache-hit == 'true'
+        run: |
+          touch project/jni/iconv/lib/*/* project/jni/icuuc/lib/*/* project/jni/icuuc/share/icu/*/* || true
+
+      # === Follow your flow afterwards ===
 
       - name: Patch Java files and build Boost, ICU, and OpenSSL
         run: |
@@ -52,14 +80,14 @@ jobs:
         run: |
           # Accept licenses in the global SDK
           for Y in `seq 20`; do echo y; done | sudo $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
-          # Kick Gradle once (non-fatal) to bootstrap wrapper/deps
+          # Bootstrap Gradle once (non-fatal)
           ./gradlew assembleRelease || true
-          # Accept licenses again with sdk_root set to this project (mirrors the template)
+          # Accept licenses again with sdk_root pointing to this project
           for Y in `seq 20`; do echo y; done | sudo $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=`pwd`
-          # Ensure a debug keystore exists (even though we only need debug output)
+          # Ensure debug keystore exists
           mkdir -p $HOME/.android
           keytool -genkey -v -keystore $HOME/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, ST=Debug, C=Debug"
-          # Point local.properties at the SDK and proguard configs (same as template)
+          # Project-local SDK and proguard configs (mirrors the reference)
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "proguard.config=proguard.cfg;proguard-local.cfg" >> local.properties
 
