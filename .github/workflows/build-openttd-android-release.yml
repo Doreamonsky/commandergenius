@@ -62,7 +62,7 @@ jobs:
         run: |
           cd project/jni/application/openttd/src
           echo "Switching to branch: ${{ github.event.inputs.openttd_branch }}"
-          git fetch origin
+          git fetch origin "+refs/heads/*:refs/remotes/origin/*"
           git branch -r
           git checkout ${{ github.event.inputs.openttd_branch }}
 
