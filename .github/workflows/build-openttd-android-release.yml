@@ -20,10 +20,10 @@ name: openttd-release
 on:
   workflow_dispatch:
     inputs:
-      openttd_ref:
-        description: 'Branch/Tag/Commit for src (e.g. master, 14)'
+      openttd_branch:
+        description: 'Branch name for src (e.g. master, release/14.x)'
         required: false
-        default: ''
+        default: '14'
 
 jobs:
   build:
@@ -58,12 +58,13 @@ jobs:
           project/jni/sdl2_mixer project/jni/sdl2_ttf
           
       - name: Switch OpenTTD src branch
-        if: ${{ github.event.inputs.openttd_ref != '' }}
+        if: ${{ github.event.inputs.openttd_branch != '' }}
         run: |
           cd project/jni/application/openttd/src
-          echo "Switching to ref: ${{ github.event.inputs.openttd_ref }}"
-          git fetch --all --tags
-          git checkout ${{ github.event.inputs.openttd_ref }}
+          echo "Switching to branch: ${{ github.event.inputs.openttd_branch }}"
+          git fetch origin ${{ github.event.inputs.openttd_branch }}
+          git checkout ${{ github.event.inputs.openttd_branch }}
+
 
       - name: Symlink the application dir
         run: |
