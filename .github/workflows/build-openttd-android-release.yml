@@ -63,6 +63,7 @@ jobs:
           cd project/jni/application/openttd/src
           echo "Switching to branch: ${{ github.event.inputs.openttd_branch }}"
           git fetch origin
+          git branch -r
           git checkout ${{ github.event.inputs.openttd_branch }}
 
       - name: Symlink the application dir
